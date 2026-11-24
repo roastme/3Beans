@@ -4,6 +4,11 @@ on:
   push:
     branches:
     - main
+    - linux-3ds
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -79,9 +84,24 @@ jobs:
         name: 3beans-linux
         path: 3beans.flatpak
 
+  build-headless-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install dependencies
+      run: sudo apt update && sudo apt install libepoxy-dev libgl-dev -y
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Compile
+      run: make headless -j$(nproc) && strip 3beans-headless
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: 3beans-headless-linux
+        path: 3beans-headless
+
   update-release:
     runs-on: ubuntu-latest
-    needs: [build-windows, build-mac, build-linux]
+    needs: [build-windows, build-mac, build-linux, build-headless-linux]
 
     steps:
     - name: Delete old release
