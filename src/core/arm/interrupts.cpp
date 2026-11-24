@@ -69,6 +69,10 @@ void Interrupts::halt(CpuId id, uint8_t type) {
     // Halt a CPU and check if all ARM11 cores have been halted
     core.arms[id].halt(BIT(type));
 
+    // An enabled interrupt may already be pending when WFI/WFE executes
+    // Recheck its level so a previously delivered wakeup cannot be lost
+    checkInterrupt(id);
+
     // Put all ARM11 cores to sleep if an ARM11 core waits for interrupt after requesting PDN sleep
     // They stay halted through interrupts until an enabled wake event clears the sleep bit
     if (id != ARM9 && (pdnCnt & BIT(0)) && !(core.arms[ARM11A].halted & BIT(2))) {

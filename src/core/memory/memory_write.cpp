@@ -395,6 +395,7 @@ template <typename T> void Memory::ioWrite(CpuId id, uint32_t address, T value) 
             DEF_IO32(0x10141008, core.interrupts.writePdnWakeEnable(IO_PARAMS)) // PDN_WAKE_ENABLE
             DEF_IO32(0x1014100C, core.interrupts.writePdnWakeReason(IO_PARAMS)) // PDN_WAKE_REASON
             DEF_IO32(0x10141200, core.gpu.writeCfg11GpuCnt(IO_PARAMS)) // CFG11_GPU_CNT
+            DEF_IO16(0x10141210, writePdnFcramCnt(IO_PARAMS)) // PDN_FCRAM_CNT
             DEF_IO32(0x10141300, core.interrupts.writeCfg11MpClkcnt(IO_PARAMS)) // CFG11_MP_CLKCNT
             DEF_IO32(0x10141304, writeCfg11MpCnt(IO_PARAMS)) // CFG11_MP_CNT
             DEF_IO08(0x10141312, core.interrupts.writeCfg11MpBootcnt(2, IO_PARAMS8)) // CFG11_MP_BOOTCNT2

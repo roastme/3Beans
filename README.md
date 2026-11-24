@@ -18,6 +18,9 @@ scripts. On top of upstream it has:
 * A debug interface: TCP control socket, GDB stub, and a raw guest serial console
 * A headless frontend (`3beans-headless`) that runs without a window or audio
 
+Small fixes are ported from other forks, with thanks: [rosaage/3Beans](https://github.com/rosaage/3Beans)
+(pending-interrupt recheck on WFI/WFE, SHA FIFO DMA threshold, PDN_FCRAM_CNT, CSND buffer locking).
+
 Upstream remains the reference implementation; bugs in unmodified upstream code are worth reporting there.
 
 ### Downloads

@@ -135,6 +135,19 @@ void Sha::pushFifo() {
     // Push data to the input FIFO and reset the current value
     inFifo.push(fifoValue);
     fifoValue = fifoMask = 0;
+
+    // Withdraw the request as soon as the FIFO crosses the DMA threshold
+    // AES can request another transfer before the scheduled SHA update runs
+    if (inFifo.size() > 8 || outFifo.size() > 8) {
+        if (arm9) {
+            core.ndma.clearDrq(0xA);
+            core.cdmas[XDMA].clearDrq(0x6);
+        }
+        else {
+            core.cdmas[CDMA0].clearDrq(0xB);
+            core.cdmas[CDMA1].clearDrq(0xB);
+        }
+    }
 }
 
 void Sha::triggerFifo() {
@@ -191,7 +204,8 @@ void Sha::update() {
     }
 
     // Set or clear SHA in DRQs based on CPU type
-    if ((shaCnt & BIT(2)) && inFifo.empty() && outFifo.empty()) {
+    // AES feeds hashes in 8-word bursts, so keep the request up until the threshold is crossed
+    if ((shaCnt & BIT(2)) && inFifo.size() <= 8 && outFifo.size() <= 8) {
         if (arm9) {
             core.ndma.setDrq(0xA);
             core.cdmas[XDMA].setDrq(0x6);
