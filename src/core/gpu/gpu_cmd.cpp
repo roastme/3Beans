@@ -1035,6 +1035,11 @@ void Gpu::writeAttrFixedData(uint32_t mask, uint32_t value) {
 
     // Pass the finished input to the shader
     if (shdMapDirty) updateShdMaps();
+    if (getenv("B3_TRACE_GPU")) {
+        fprintf(stderr, "[trace] immediate vtx attr=%d in0=(%f,%f,%f,%f) in1=(%f,%f,%f,%f)\n",
+                gpuVshNumAttr, shdInput[0][0], shdInput[0][1], shdInput[0][2], shdInput[0][3],
+                shdInput[1][0], shdInput[1][1], shdInput[1][2], shdInput[1][3]);
+    }
     gpuShader->processVtx();
 }
 

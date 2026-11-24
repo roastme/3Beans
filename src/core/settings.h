@@ -41,11 +41,13 @@ namespace Settings {
     extern int gpuFragShader;
     extern int systemType;
     extern int unitType;
+    extern int debugPort;
 
     extern std::string boot11Path;
     extern std::string boot9Path;
     extern std::string nandPath;
     extern std::string sdPath;
+    extern std::string firmPath;
     extern std::string basePath;
 
     void add(std::vector<Setting> &extra);

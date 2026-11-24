@@ -36,6 +36,8 @@ template <typename T> void Memory::ioWrite(CpuId id, uint32_t address, T value) 
 
         // Check registers that are shared between CPUs
         switch (base) {
+            DEF_IO32(0x1017F008, core.debug.consoleWrite(8, data)) // Debug console TX
+            DEF_IO32(0x1017F010, core.debug.consoleWrite(16, data)) // Debug heartbeat
             DEF_IO32(0x10101000, core.shas[0].writeCnt(IO_PARAMS)) // SHA0_CNT
             DEF_IO32(0x10101004, core.shas[0].writeBlkcnt(IO_PARAMS)) // SHA0_BLKCNT
             DEF_IO32(0x10101040, core.shas[0].writeHash(0, IO_PARAMS)) // SHA0_HASH0
@@ -389,6 +391,9 @@ template <typename T> void Memory::ioWrite(CpuId id, uint32_t address, T value) 
             DEF_IO08(0x1014000F, writeCfg11Wram32kData(7, IO_PARAMS8)) // CFG11_WRAM_32K_DATA7
             DEF_IO32(0x10140420, writeCfg11BrOverlayCnt(IO_PARAMS)) // CFG11_BR_OVERLAY_CNT
             DEF_IO32(0x10140424, writeCfg11BrOverlayVal(IO_PARAMS)) // CFG11_BR_OVERLAY_VAL
+            DEF_IO16(0x10141000, core.interrupts.writePdnCnt(IO_PARAMS)) // PDN_CNT
+            DEF_IO32(0x10141008, core.interrupts.writePdnWakeEnable(IO_PARAMS)) // PDN_WAKE_ENABLE
+            DEF_IO32(0x1014100C, core.interrupts.writePdnWakeReason(IO_PARAMS)) // PDN_WAKE_REASON
             DEF_IO32(0x10141200, core.gpu.writeCfg11GpuCnt(IO_PARAMS)) // CFG11_GPU_CNT
             DEF_IO32(0x10141300, core.interrupts.writeCfg11MpClkcnt(IO_PARAMS)) // CFG11_MP_CLKCNT
             DEF_IO32(0x10141304, writeCfg11MpCnt(IO_PARAMS)) // CFG11_MP_CNT
@@ -403,6 +408,9 @@ template <typename T> void Memory::ioWrite(CpuId id, uint32_t address, T value) 
             DEF_IO08(0x10144000, core.i2c.writeBusData(1, IO_PARAMS8)) // I2C_BUS1_DATA
             DEF_IO08(0x10144001, core.i2c.writeBusCnt(1, IO_PARAMS8)) // I2C_BUS1_CNT
             DEF_IO32(0x10145000, core.csnd.writeSndexcnt(IO_PARAMS)) // CODEC_SNDEXCNT
+            DEF_IO16(0x10147022, core.i2c.writeGpio3Dir(IO_PARAMS)) // GPIO3_DIR
+            DEF_IO16(0x10147024, core.i2c.writeGpio3Edge(IO_PARAMS)) // GPIO3_EDGE
+            DEF_IO16(0x10147026, core.i2c.writeGpio3IrqEnable(IO_PARAMS)) // GPIO3_IRQ_ENABLE
             DEF_IO08(0x10148000, core.i2c.writeBusData(2, IO_PARAMS8)) // I2C_BUS2_DATA
             DEF_IO08(0x10148001, core.i2c.writeBusCnt(2, IO_PARAMS8)) // I2C_BUS2_CNT
             DEF_IO08(0x10161000, core.i2c.writeBusData(0, IO_PARAMS8)) // I2C_BUS0_DATA
@@ -1032,6 +1040,7 @@ template <typename T> void Memory::ioWrite(CpuId id, uint32_t address, T value) 
                 DEF_IO32(0x10401B6C, core.gpu.writeVshDescData(IO_PARAMS)) // GPU_VSH_DESC_DATA
                 DEF_IO32(0x10401B70, core.gpu.writeVshDescData(IO_PARAMS)) // GPU_VSH_DESC_DATA
                 DEF_IO32(0x10401B74, core.gpu.writeVshDescData(IO_PARAMS)) // GPU_VSH_DESC_DATA
+                DEF_IO32(0x17E00008, core.interrupts.writeMpScuStatus(IO_PARAMS)) // MP_SCU_STATUS
                 DEF_IO32(0x17E00100, core.interrupts.writeMpIle(id, IO_PARAMS)) // MP_ILE
                 DEF_IO32(0x17E00104, core.interrupts.writeMpPrioMask(id, IO_PARAMS)) // MP_PRIO_MASK
                 DEF_IO32(0x17E00110, core.interrupts.writeMpEoi(id, IO_PARAMS)) // MP_EOI
@@ -1076,6 +1085,14 @@ template <typename T> void Memory::ioWrite(CpuId id, uint32_t address, T value) 
                 DEF_IO32(0x17E00A28, core.timers.writeMpTmcnt(ARM11D, 1, IO_PARAMS)) // MP3_TMCNT1
                 DEF_IO32(0x17E00A2C, core.timers.writeMpTmirq(ARM11D, 1, IO_PARAMS)) // MP3_TMIRQ1
                 DEF_IO32(0x17E01000, core.interrupts.writeMpIge(IO_PARAMS)) // MP_IGE
+                DEF_IO32(0x17E01C00, core.interrupts.writeMpCfg(0, IO_PARAMS)) // MP_ICFG0
+                DEF_IO32(0x17E01C04, core.interrupts.writeMpCfg(1, IO_PARAMS)) // MP_ICFG1
+                DEF_IO32(0x17E01C08, core.interrupts.writeMpCfg(2, IO_PARAMS)) // MP_ICFG2
+                DEF_IO32(0x17E01C0C, core.interrupts.writeMpCfg(3, IO_PARAMS)) // MP_ICFG3
+                DEF_IO32(0x17E01C10, core.interrupts.writeMpCfg(4, IO_PARAMS)) // MP_ICFG4
+                DEF_IO32(0x17E01C14, core.interrupts.writeMpCfg(5, IO_PARAMS)) // MP_ICFG5
+                DEF_IO32(0x17E01C18, core.interrupts.writeMpCfg(6, IO_PARAMS)) // MP_ICFG6
+                DEF_IO32(0x17E01C1C, core.interrupts.writeMpCfg(7, IO_PARAMS)) // MP_ICFG7
                 DEF_IO32(0x17E01100, core.interrupts.writeMpIeSet(0, IO_PARAMS)) // MP_IE0_SET
                 DEF_IO32(0x17E01104, core.interrupts.writeMpIeSet(1, IO_PARAMS)) // MP_IE1_SET
                 DEF_IO32(0x17E01108, core.interrupts.writeMpIeSet(2, IO_PARAMS)) // MP_IE2_SET

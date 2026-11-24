@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "defines.h"
+#include "debug.h"
 #include "settings.h"
 #include "arm/arm_interp.h"
 #include "arm/cp15.h"
@@ -109,6 +110,7 @@ enum Task {
     WIFI_WRITE_BLOCK,
     NTR_WORD_READY,
     CTR_WORD_READY,
+    MCU_LCD_EVENT,
     MAX_TASKS
 };
 
@@ -130,6 +132,7 @@ public:
     Cartridge cartridge;
     Cdma cdmas[3];
     Cp15 cp15;
+    Debug debug;
     Csnd csnd;
     Dsp *dsp = nullptr;
     Gpu gpu;
@@ -158,6 +161,7 @@ public:
     void runFrame() { (*runFunc)(*this); }
     void schedule(Task task, uint64_t cycles);
     void initDsp();
+    bool loadFirm(const std::string &path);
 
 private:
     std::function<void()> tasks[MAX_TASKS];
@@ -165,6 +169,7 @@ private:
     int dspCurrent = 0;
 
     std::chrono::steady_clock::time_point lastFpsTime;
+    std::chrono::steady_clock::time_point nextFrame;
     int fpsCount = 0;
 
     void resetCycles();

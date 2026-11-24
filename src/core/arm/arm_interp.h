@@ -29,6 +29,11 @@ public:
     uint8_t halted = 0;
     uint32_t cpsr = 0;
     uint32_t *registers[32] = {};
+    bool dbg = false; // Set by the debugger when this CPU needs per-instruction checks
+    uint32_t curPc() const { return *registers[15] - ((cpsr & BIT(5)) ? 4 : 8); }
+    void setPc(uint32_t address);
+    uint32_t getSpsr() const { return spsr ? *spsr : 0; }
+    uint32_t getUserReg(int i) const { return registersUsr[i]; }
 
     ArmInterp(Core &core, CpuId id);
     void init();
@@ -41,6 +46,7 @@ public:
     void unhalt(uint8_t mask);
     int exception(uint8_t vector);
     void invalidatePc() { pcData = nullptr; }
+    void jumpTo(uint32_t address);
 
 private:
     Core &core;
@@ -67,6 +73,9 @@ private:
     uint32_t excAddress = 0;
     bool exclusive = false;
     bool event = false;
+    bool fetchAbort = false;
+    uint32_t abortBase = 0;
+    uint8_t abortReg = 15;
 
     static int (ArmInterp::*armInstrs[0x1000])(uint32_t);
     static int (ArmInterp::*thumbInstrs[0x400])(uint16_t);
@@ -80,6 +89,10 @@ private:
     void flushPipeline();
     void setCpsr(uint32_t value, bool save = false);
     int handleReserved(uint32_t opcode);
+    int dataAbort();
+    int prefetchAbort();
+    uint32_t fetchOpcode32();
+    uint16_t fetchOpcode16();
 
     int unkArm(uint32_t opcode);
     int unkThumb(uint16_t opcode);
@@ -412,6 +425,10 @@ private:
     int smulls(uint32_t opcode);
     int smlals(uint32_t opcode);
     int smulbb(uint32_t opcode);
+    int smmla(uint32_t opcode);
+    int smmlar(uint32_t opcode);
+    int smmls(uint32_t opcode);
+    int smmlsr(uint32_t opcode);
     int smulbt(uint32_t opcode);
     int smultb(uint32_t opcode);
     int smultt(uint32_t opcode);

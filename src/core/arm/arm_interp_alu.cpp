@@ -733,6 +733,36 @@ int ArmInterp::smlals(uint32_t opcode) { // SMLALS RdLo,RdHi,Rm,Rs
     return 5;
 }
 
+static inline uint32_t smmHigh(uint32_t *regs[], uint32_t opcode, bool sub, bool round) {
+    // Signed most-significant-word multiply, with optional accumulate (Ra != 15) and rounding
+    int64_t prod = (int64_t)(int32_t)*regs[opcode & 0xF] * (int32_t)*regs[(opcode >> 8) & 0xF];
+    uint32_t ra = (opcode >> 12) & 0xF;
+    int64_t acc = (ra != 15) ? ((int64_t)(int32_t)*regs[ra] << 32) : 0;
+    int64_t res = sub ? (acc - prod) : (acc + prod);
+    if (round) res += 0x80000000LL;
+    return (uint32_t)(res >> 32);
+}
+
+int ArmInterp::smmla(uint32_t opcode) { // SMMUL/SMMLA
+    *registers[(opcode >> 16) & 0xF] = smmHigh(registers, opcode, false, false);
+    return 1;
+}
+
+int ArmInterp::smmlar(uint32_t opcode) { // SMMULR/SMMLAR
+    *registers[(opcode >> 16) & 0xF] = smmHigh(registers, opcode, false, true);
+    return 1;
+}
+
+int ArmInterp::smmls(uint32_t opcode) { // SMMLS
+    *registers[(opcode >> 16) & 0xF] = smmHigh(registers, opcode, true, false);
+    return 1;
+}
+
+int ArmInterp::smmlsr(uint32_t opcode) { // SMMLSR
+    *registers[(opcode >> 16) & 0xF] = smmHigh(registers, opcode, true, true);
+    return 1;
+}
+
 int ArmInterp::smulbb(uint32_t opcode) { // SMULBB Rd,Rm,Rs
     // Signed half-word multiplication
     uint32_t *op0 = registers[(opcode >> 16) & 0xF];

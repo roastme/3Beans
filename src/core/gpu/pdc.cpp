@@ -102,6 +102,15 @@ void Pdc::drawScreen(int i, uint32_t *buffer) {
     }
 }
 
+void Pdc::snapshot(uint32_t *buffer) {
+    // Draw the current screens into a buffer without queueing it
+    memset(buffer, 0, 400 * 480 * sizeof(uint32_t));
+    for (int i = 0; i < 2; i++)
+        screenBases[i] = (pdcFramebufSelAck[i] & BIT(0)) ? pdcFramebufLt1[i] : pdcFramebufLt0[i];
+    drawScreen(0, &buffer[0]);
+    drawScreen(1, &buffer[240 * 400 + 40]);
+}
+
 void Pdc::drawFrame() {
     // Trigger PDC interrupts at V-blank if not disabled
     // TODO: handle timings for different modes properly

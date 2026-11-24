@@ -31,6 +31,7 @@ public:
     Pdc(Core &core): core(core) {}
     uint32_t *getFrame();
     void drawFrame();
+    void snapshot(uint32_t *buffer); // 400x480 RGBA, top screen then bottom (for the debugger)
 
     uint32_t readFramebufLt0(int i) { return pdcFramebufLt0[i]; }
     uint32_t readFramebufLt1(int i) { return pdcFramebufLt1[i]; }

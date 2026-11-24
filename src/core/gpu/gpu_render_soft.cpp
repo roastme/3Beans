@@ -612,6 +612,12 @@ void GpuRenderSoft::drawPixel(SoftVertex &p) {
     // Check bounds and convert coordinates to an 8x8 tile offset
     int x = int(p.x) - viewX;
     int y = (flipY ? (bufHeight - int(p.y) - 1) : int(p.y)) - viewY;
+    if (getenv("B3_TRACE_GPU") && (p.x != p.x || x < 0 || x >= bufWidth || y < 0 || y >= bufHeight)) {
+        if (p.x < 2.0f * bufWidth && p.y < 2.0f * bufHeight)
+            fprintf(stderr, "[trace] drawPixel out of bounds x=%d y=%d (p=%f,%f) buf=%dx%d view=%d,%d\n",
+                    x, y, p.x, p.y, bufWidth, bufHeight, viewX, viewY);
+        return;
+    }
     if (x < 0 || x >= bufWidth || y < 0 || y >= bufHeight) return;
     uint32_t val, ofs = (((y >> 3) * (bufWidth >> 3) + (x >> 3)) << 6);
     ofs |= ((y << 3) & 0x20) | ((y << 2) & 0x8) | ((y << 1) & 0x2);
@@ -689,6 +695,9 @@ void GpuRenderSoft::drawPixel(SoftVertex &p) {
     // Get source color values from the texture combiner
     updateCombine(p);
     SoftColor s0 = prevBuffer[combEnd], d0;
+    if (getenv("B3_TRACE_GPU"))
+        fprintf(stderr, "[trace] pixel %d,%d z=%f depth=%u pass=%d src=(%f,%f,%f,%f) fmt=%d\n",
+                x, y, p.z, depth, pass, s0.r, s0.g, s0.b, s0.a, colbufFmt);
 
     // Compare the source alpha value with the provided one
     switch (alphaFunc) {
@@ -885,7 +894,15 @@ void GpuRenderSoft::drawTriangle(SoftVertex &a, SoftVertex &b, SoftVertex &c) {
         return;
 
     // Scale the coordinate steps to screen space
-    if (viewStepH <= 0 || viewStepV <= 0) return;
+    if (viewStepH <= 0 || viewStepV <= 0) {
+        if (getenv("B3_TRACE_GPU"))
+            fprintf(stderr, "[trace] drawTriangle rejected: stepH=%f stepV=%f scaleH=%f scaleV=%f cull=%d cross=%f\n",
+                    viewStepH, viewStepV, viewScaleH, viewScaleV, cullMode, cross);
+        return;
+    }
+    if (getenv("B3_TRACE_GPU"))
+        fprintf(stderr, "[trace] drawTriangle a=(%f,%f,%f) b=(%f,%f,%f) c=(%f,%f,%f) scale=%f,%f step=%f,%f cull=%d cross=%f\n",
+                a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, viewScaleH, viewScaleV, viewStepH, viewStepV, cullMode, cross);
     float ys = viewStepV * viewScaleV;
     float xs = viewStepH * viewScaleH;
 
@@ -984,6 +1001,9 @@ void GpuRenderSoft::clipTriangle(SoftVertex &a, SoftVertex &b, SoftVertex &c) {
 }
 
 void GpuRenderSoft::submitVertex(SoftVertex &vertex) {
+    if (getenv("B3_TRACE_GPU"))
+        fprintf(stderr, "[trace] submit vtx (%f,%f,%f,%f) color=(%f,%f,%f,%f) prim=%d\n",
+                vertex.x, vertex.y, vertex.z, vertex.w, vertex.r, vertex.g, vertex.b, vertex.a, primMode);
     // Build a triangle based on the current primitive mode
     switch (primMode) {
     case TRIANGLES:

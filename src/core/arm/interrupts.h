@@ -33,11 +33,16 @@ public:
     void checkInterrupt(CpuId id) { sendInterrupt(id, -1); }
     void interrupt(CpuId id);
     void halt(CpuId id, uint8_t type = 0);
+    void pdnWake(uint32_t reason);
 
     uint16_t readCfg11Socinfo();
     uint32_t readCfg11MpClkcnt() { return cfg11MpClkcnt; }
     uint8_t readCfg11MpBootcnt(int i);
+    uint16_t readPdnCnt() { return pdnCnt; }
+    uint32_t readPdnWakeEnable() { return pdnWakeEnable; }
+    uint32_t readPdnWakeReason() { return pdnWakeReason; }
     uint32_t readMpScuConfig();
+    uint32_t readMpScuStatus() { return mpScuStatus; }
     uint32_t readMpIle(CpuId id) { return mpIle[id]; }
     uint32_t readMpPrioMask(CpuId id) { return mpPrioMask[id]; }
     uint32_t readMpAck(CpuId id);
@@ -45,6 +50,7 @@ public:
     uint32_t readMpIge() { return mpIge; }
     uint32_t readMpCtrlType();
     uint32_t readMpIe(int i) { return mpIe[i]; }
+    uint32_t readMpCfg(int i) { return mpCfg[i]; }
     uint32_t readMpIp(CpuId id, int i) { return mpIp[id][i]; }
     uint32_t readMpIa(CpuId id, int i) { return mpIa[id][i]; }
     uint8_t readMpPriorityL(CpuId id, int i) { return mpPriorityL[id][i]; }
@@ -55,10 +61,15 @@ public:
 
     void writeCfg11MpClkcnt(uint32_t mask, uint32_t value);
     void writeCfg11MpBootcnt(int i, uint8_t value);
+    void writePdnCnt(uint16_t mask, uint16_t value);
+    void writePdnWakeEnable(uint32_t mask, uint32_t value);
+    void writePdnWakeReason(uint32_t mask, uint32_t value);
+    void writeMpScuStatus(uint32_t mask, uint32_t value);
     void writeMpIle(CpuId id, uint32_t mask, uint32_t value);
     void writeMpPrioMask(CpuId id, uint32_t mask, uint32_t value);
     void writeMpEoi(CpuId id, uint32_t mask, uint32_t value);
     void writeMpIge(uint32_t mask, uint32_t value);
+    void writeMpCfg(int i, uint32_t mask, uint32_t value) { mpCfg[i] = (mpCfg[i] & ~mask) | (value & mask); }
     void writeMpIeSet(int i, uint32_t mask, uint32_t value);
     void writeMpIeClear(int i, uint32_t mask, uint32_t value);
     void writeMpIpSet(int i, uint32_t mask, uint32_t value);
@@ -77,9 +88,14 @@ private:
     uint8_t sources[MAX_CPUS - 1][0x10] = {};
 
     uint32_t cfg11MpClkcnt = 0;
+    uint16_t pdnCnt = 0;
+    uint32_t pdnWakeEnable = 0;
+    uint32_t pdnWakeReason = 0;
+    uint32_t mpScuStatus = 0;
     uint32_t mpIle[MAX_CPUS - 1] = {};
     uint32_t mpPrioMask[MAX_CPUS - 1] = { 0xF0, 0xF0, 0xF0, 0xF0 };
     uint32_t mpIge = 0;
+    uint32_t mpCfg[8] = {0xAAAAAAAA, 0x55555555, 0, 0, 0, 0, 0, 0};
     uint32_t mpIe[4] = { 0xFFFF };
     uint32_t mpIp[MAX_CPUS - 1][4] = {};
     uint32_t mpIa[MAX_CPUS - 1][4] = {};

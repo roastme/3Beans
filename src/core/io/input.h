@@ -36,6 +36,10 @@ public:
     void pressHome();
     void releaseHome();
     void updateHome();
+    void setLid(bool closed);
+    void updateLid();
+    bool isLidClosed() { return lidClosed; }
+    uint16_t readGpio1Data() { return lidClosed << 2; } // Bit 2: shell closed
 
     uint32_t readSpiFifoCnt() { return spiFifoCnt; }
     uint32_t readSpiFifoSelect() { return spiFifoSelect; }
@@ -55,6 +59,8 @@ public:
 private:
     Core &core;
     uint8_t homeState = 0;
+    int8_t lidRequest = -1;
+    bool lidClosed = false;
 
     uint16_t stickLX = 0x7FF;
     uint16_t stickLY = 0x7FF;

@@ -21,6 +21,8 @@
 #include <cstring>
 
 #include "../core.h"
+#include <cstdlib>
+#include <cstdio>
 #include "gpu_render.h"
 
 // Lookup table for vertex shader instructions
@@ -157,6 +159,13 @@ void GpuShaderInterp::processVtx(uint32_t idx) {
 
     // Run the vertex shader
     runShader<false>();
+    if (getenv("B3_TRACE_GPU")) {
+        fprintf(stderr, "[trace] vsh entry=%u end=%u out0=(%f,%f,%f,%f) out1=(%f,%f,%f,%f) out2=(%f,%f,%f,%f) out3=(%f,%f,%f,%f)\n",
+                vshEntry, vshEnd, shdOut[0][0], shdOut[0][1], shdOut[0][2], shdOut[0][3],
+                shdOut[1][0], shdOut[1][1], shdOut[1][2], shdOut[1][3],
+                shdOut[2][0], shdOut[2][1], shdOut[2][2], shdOut[2][3],
+                shdOut[3][0], shdOut[3][1], shdOut[3][2], shdOut[3][3]);
+    }
 
     // Cache and submit a vertex from the output if geometry shader is disabled
     if (!gshInCount) {

@@ -198,6 +198,7 @@ void SdMmc::writeBlock() {
     if (FILE *dst = (sdPortSelect & BIT(0)) ? nand : sd) {
         fseek(dst, hc ? (int64_t(curAddress) << 9) : curAddress, SEEK_SET);
         fwrite(data, sizeof(uint32_t), len, dst);
+        fflush(dst); // keep the image consistent if the emulator is killed
     }
 
     // Change state and trigger a DRQ or end interrupt based on blocks left
@@ -271,9 +272,36 @@ void SdMmc::setIfCond() {
 }
 
 void SdMmc::getCsd() {
-    // Pretend to read the 128-bit CSD register
-    for (int i = 0; i < 4; i++)
-        pushResponse(0);
+    // For the SD card, build a CSD that reports the image's real capacity,
+    // otherwise guests (e.g. Linux) see a 0-sector disk and drop buffered writes.
+    // Byte i holds CSD bits [8i+15:8i+8]; the response registers drop the CRC byte.
+    uint8_t csd[16] = {};
+    if (sd && !(sdPortSelect & BIT(0))) {
+        fseek(sd, 0, SEEK_END);
+        uint64_t sectors = uint64_t(ftell(sd)) >> 9;
+        if (sdhc) {
+            // CSD version 2.0: capacity = (C_SIZE + 1) * 512KB
+            uint32_t c = (sectors >> 10) - 1;
+            csd[14] = 0x40;
+            csd[9] = 0x09; // READ_BL_LEN 512
+            csd[7] = (c >> 16) & 0x3F;
+            csd[6] = (c >> 8) & 0xFF;
+            csd[5] = c & 0xFF;
+        } else {
+            // CSD version 1.0 with 512-byte blocks and C_SIZE_MULT 7 (512 blocks per C_SIZE step)
+            uint32_t c = std::min<uint64_t>(std::max<uint64_t>(sectors >> 9, 1) - 1, 0xFFF);
+            csd[9] = 0x09;
+            csd[5] = 0x03; // C_SIZE_MULT[2:1] = 3
+            csd[4] = 0x80; // C_SIZE_MULT[0] = 1
+            csd[8] = (c >> 10) & 0x3;
+            csd[7] = (c >> 2) & 0xFF;
+            csd[6] = (c & 0x3) << 6;
+        }
+    }
+    for (int i = 0; i < 4; i++) {
+        int w = 3 - i;
+        pushResponse(csd[w * 4] | (csd[w * 4 + 1] << 8) | (csd[w * 4 + 2] << 16) | (uint32_t(csd[w * 4 + 3]) << 24));
+    }
 }
 
 void SdMmc::getCid() {

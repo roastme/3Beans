@@ -69,6 +69,25 @@ void Input::updateHome() {
     }
 }
 
+void Input::setLid(bool closed) {
+    // Request a change of the shell (lid) state, applied at the end of the frame
+    lidRequest = closed;
+}
+
+void Input::updateLid() {
+    // Apply a requested shell state change and trigger the MCU shell interrupt
+    if (lidRequest < 0) return;
+    bool closed = lidRequest;
+    lidRequest = -1;
+    if (closed == lidClosed) return;
+    lidClosed = closed;
+    LOG_INFO("Shell %s\n", closed ? "closed" : "opened");
+
+    // Opening the shell is a PDN wake source of its own, besides the MCU interrupt
+    if (!closed) core.interrupts.pdnWake(BIT(3));
+    core.i2c.mcuInterrupt(closed ? BIT(5) : BIT(6));
+}
+
 uint8_t Input::spiTransfer(uint8_t value) {
     // End an SPI bus 1 transfer and trigger an interrupt when its length is reached
     if (--spiCount == 0) {

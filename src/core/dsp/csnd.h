@@ -47,7 +47,9 @@ public:
     uint16_t readChanCnt(int i) { return csndChanCnt[i]; }
     uint16_t readChanRvol(int i) { return csndChanRvol[i]; }
     uint16_t readChanLvol(int i) { return csndChanLvol[i]; }
-    uint32_t readChanStart(int i) { return csndChanStart[i] & ~0x3; }
+    // While a channel plays, the start-address register reads back the address being
+    // played (libn3ds CSND_getChPos(); seen advancing on hardware), else the programmed start
+    uint32_t readChanStart(int i) { return ((enabled & BIT(i)) ? chanCurrent[i] : csndChanStart[i]) & ~0x3; }
     uint16_t readSndexcnt() { return codecSndexcnt; }
 
     void writeMainVol(uint16_t mask, uint16_t value);

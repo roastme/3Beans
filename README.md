@@ -7,6 +7,19 @@ boot the home menu and launch some games, but it's still young and has plenty of
 hardware GPU rendering, but CPUs are still fully interpreted. My goal for this project is to achieve viable speeds with
 full low-level emulation, and maybe explore some high-level elements down the road.
 
+### This fork
+This repository is a fork of [Hydr8gon/3Beans](https://github.com/Hydr8gon/3Beans) that adds what's needed to
+run real firmware images on the emulated hardware (Linux ports such as Cyano3DS), and to drive the emulator from
+scripts. On top of upstream it has:
+
+* MMU aborts, GPIO3, and SD CSD handling for ARM9/ARM11 firmware boots
+* SMMLx instructions (CP14 SLEEP/WAKE/STANDBY), PDN sleep/wake with a closable lid shell
+* MCU and CSND accuracy fixes, plus GPU command tracing
+* A debug interface: TCP control socket, GDB stub, and a raw guest serial console
+* A headless frontend (`3beans-headless`) that runs without a window or audio
+
+Upstream remains the reference implementation; bugs in unmodified upstream code are worth reporting there.
+
 ### Downloads
 3Beans is available for Windows, macOS, and Linux. The latest builds are automatically provided via GitHub Actions,
 and can be downloaded from the [releases page](https://github.com/Hydr8gon/3Beans/releases).
@@ -40,6 +53,43 @@ dependencies. Navigate to the project root directory and run `make -j$(nproc)` t
 [PortAudio](https://www.portaudio.com), and [Epoxy](https://github.com/anholt/libepoxy). This can be done with a package
 manager like [Homebrew](https://brew.sh) on macOS, or a built-in one on Linux. Run `make` in the project root directory
 to start building.
+
+### Headless frontend
+`make headless` builds `3beans-headless`, which runs the core without a window or audio and is controlled over TCP.
+The settings folder and file names are the same as the GUI's (`3beans.ini`); command line options override them.
+
+```
+3beans-headless [--dir SETTINGSDIR] [--port N] [--frames N] [--no-limit] [--log N]
+                [--firm FILE] [--sd FILE] [--system-type 0|1|2]
+```
+
+Three servers are opened on `127.0.0.1`, on the port given by `--port` (default 4900) and the following two:
+
+| port | protocol | purpose |
+| --- | --- | --- |
+| N | line-based control | debug commands, one per line; replies are plain text |
+| N+1 | GDB remote serial protocol | attach a GDB with an ARM target |
+| N+2 | raw bytes | guest console UART (`0x1017F000`) in and out |
+
+Send `help` to the control port for the full command list. Highlights:
+
+```
+status | regs [cpu] | pause | resume | step [cpu]      (cpu: 0-3 ARM11, 9 ARM9)
+bp add|del ADDR [cpumask] | watch add r|w|a ADDR [len] | watch list
+mem v|p CPU ADDR LEN | memw v|p CPU ADDR HEXBYTES | faults [N]
+shot FILE.png [top|bottom|both] | key NAME [ms] | touch X Y [ms]
+lid open|close | conwrite TEXT | conread | conlog [N]
+log level N | trace CPU LO HI LO2 HI2 FILE | quit
+```
+
+A minimal control client in Python:
+
+```python
+import socket
+s = socket.create_connection(("127.0.0.1", 4900))
+s.sendall(b"status\n")
+print(s.recv(4096).decode())
+```
 
 ### References
 * [GBATEK](https://problemkaputt.de/gbatek.htm) - Incomplete but great reference for the 3DS hardware

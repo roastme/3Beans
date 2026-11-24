@@ -266,6 +266,7 @@ bool Vfp11Interp::checkEnable() {
     // Check if the VFP is enabled and trigger an undefined exception if not
     if (fpexc & BIT(30)) return true;
     *core.arms[id].registers[15] -= 4;
+    if (core.debug.faultTrace) core.debug.onFault(CpuId(id), 'U');
     core.arms[id].exception(0x04);
     return false;
 }

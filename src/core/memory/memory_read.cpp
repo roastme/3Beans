@@ -35,6 +35,9 @@ template <typename T> T Memory::ioRead(CpuId id, uint32_t address) {
 
         // Check registers that are shared between CPUs
         switch (base) {
+            DEF_IO32(0x1017F000, data = core.debug.consoleRead(0)) // Debug console status
+            DEF_IO32(0x1017F004, data = core.debug.consoleRead(4)) // Debug console RX
+            DEF_IO32(0x1017F00C, data = core.debug.consoleRead(12)) // Debug console ID
             DEF_IO32(0x10101000, data = core.shas[0].readCnt()) // SHA0_CNT
             DEF_IO32(0x10101004, data = core.shas[0].readBlkcnt()) // SHA0_BLKCNT
             DEF_IO32(0x10101040, data = core.shas[0].readHash(0)) // SHA0_HASH0
@@ -234,6 +237,9 @@ template <typename T> T Memory::ioRead(CpuId id, uint32_t address) {
             DEF_IO32(0x10140420, data = readCfg11BrOverlayCnt()) // CFG11_BR_OVERLAY_CNT
             DEF_IO32(0x10140424, data = readCfg11BrOverlayVal()) // CFG11_BR_OVERLAY_VAL
             DEF_IO16(0x10140FFC, data = core.interrupts.readCfg11Socinfo()) // CFG11_SOCINFO
+            DEF_IO16(0x10141000, data = core.interrupts.readPdnCnt()) // PDN_CNT
+            DEF_IO32(0x10141008, data = core.interrupts.readPdnWakeEnable()) // PDN_WAKE_ENABLE
+            DEF_IO32(0x1014100C, data = core.interrupts.readPdnWakeReason()) // PDN_WAKE_REASON
             DEF_IO32(0x10141200, data = core.gpu.readCfg11GpuCnt()) // CFG11_GPU_CNT
             DEF_IO32(0x10141300, data = core.interrupts.readCfg11MpClkcnt()) // CFG11_MP_CLKCNT
             DEF_IO32(0x10141304, data = readCfg11MpCnt()) // CFG11_MP_CNT
@@ -251,6 +257,11 @@ template <typename T> T Memory::ioRead(CpuId id, uint32_t address) {
             DEF_IO08(0x10144001, data = core.i2c.readBusCnt(1)) // I2C_BUS1_CNT
             DEF_IO32(0x10145000, data = core.csnd.readSndexcnt()) // CODEC_SNDEXCNT
             DEF_IO16(0x10146000, data = core.input.readHidPad()) // HID_PAD
+            DEF_IO16(0x10147000, data = core.input.readGpio1Data()) // GPIO1_DATA
+            DEF_IO16(0x10147020, data = core.i2c.readGpio3Data()) // GPIO3_DATA
+            DEF_IO16(0x10147022, data = core.i2c.readGpio3Dir()) // GPIO3_DIR
+            DEF_IO16(0x10147024, data = core.i2c.readGpio3Edge()) // GPIO3_EDGE
+            DEF_IO16(0x10147026, data = core.i2c.readGpio3IrqEnable()) // GPIO3_IRQ_ENABLE
             DEF_IO08(0x10148000, data = core.i2c.readBusData(2)) // I2C_BUS2_DATA
             DEF_IO08(0x10148001, data = core.i2c.readBusCnt(2)) // I2C_BUS2_CNT
             DEF_IO08(0x10161000, data = core.i2c.readBusData(0)) // I2C_BUS0_DATA
@@ -835,6 +846,7 @@ template <typename T> T Memory::ioRead(CpuId id, uint32_t address) {
                 DEF_IO32(0x10401AF0, data = core.gpu.readVshAttrIdsH()) // GPU_VSH_ATTR_IDS_H
                 DEF_IO32(0x10401AF4, data = core.gpu.readVshOutMask()) // GPU_VSH_OUT_MASK
                 DEF_IO32(0x17E00004, data = core.interrupts.readMpScuConfig()) // MP_SCU_CONFIG
+                DEF_IO32(0x17E00008, data = core.interrupts.readMpScuStatus()) // MP_SCU_STATUS
                 DEF_IO32(0x17E00100, data = core.interrupts.readMpIle(id)) // MP_ILE
                 DEF_IO32(0x17E00104, data = core.interrupts.readMpPrioMask(id)) // MP_PRIO_MASK
                 DEF_IO32(0x17E0010C, data = core.interrupts.readMpAck(id)) // MP_ACK
@@ -881,6 +893,14 @@ template <typename T> T Memory::ioRead(CpuId id, uint32_t address) {
                 DEF_IO32(0x17E00A2C, data = core.timers.readMpTmirq(ARM11D, 1)) // MP3_TMIRQ1
                 DEF_IO32(0x17E01000, data = core.interrupts.readMpIge()) // MP_IGE
                 DEF_IO32(0x17E01004, data = core.interrupts.readMpCtrlType()) // MP_CTRL_TYPE
+                DEF_IO32(0x17E01C00, data = core.interrupts.readMpCfg(0)) // MP_ICFG0
+                DEF_IO32(0x17E01C04, data = core.interrupts.readMpCfg(1)) // MP_ICFG1
+                DEF_IO32(0x17E01C08, data = core.interrupts.readMpCfg(2)) // MP_ICFG2
+                DEF_IO32(0x17E01C0C, data = core.interrupts.readMpCfg(3)) // MP_ICFG3
+                DEF_IO32(0x17E01C10, data = core.interrupts.readMpCfg(4)) // MP_ICFG4
+                DEF_IO32(0x17E01C14, data = core.interrupts.readMpCfg(5)) // MP_ICFG5
+                DEF_IO32(0x17E01C18, data = core.interrupts.readMpCfg(6)) // MP_ICFG6
+                DEF_IO32(0x17E01C1C, data = core.interrupts.readMpCfg(7)) // MP_ICFG7
                 DEF_IO32(0x17E01100, data = core.interrupts.readMpIe(0)) // MP_IE0
                 DEF_IO32(0x17E01104, data = core.interrupts.readMpIe(1)) // MP_IE1
                 DEF_IO32(0x17E01108, data = core.interrupts.readMpIe(2)) // MP_IE2

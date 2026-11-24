@@ -21,6 +21,9 @@
 
 #include <cstdio>
 
+// Runtime-filtered logging (debug.cpp); output goes to stdout unless the debugger redirects it
+void dbgLog(int level, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+
 enum CpuId {
     ARM11A,
     ARM11B,
@@ -78,28 +81,28 @@ enum CpuId {
 
 // If enabled, print critical logs in red
 #if LOG_LEVEL > 0
-#define LOG_CRIT(...) printf("\x1b[31m" __VA_ARGS__)
+#define LOG_CRIT(...) dbgLog(1, "\x1b[31m" __VA_ARGS__)
 #else
 #define LOG_CRIT(...) (0)
 #endif
 
 // If enabled, print warning logs in yellow
 #if LOG_LEVEL > 1
-#define LOG_WARN(...) printf("\x1b[33m" __VA_ARGS__)
+#define LOG_WARN(...) dbgLog(2, "\x1b[33m" __VA_ARGS__)
 #else
 #define LOG_WARN(...) (0)
 #endif
 
 // If enabled, print info logs normally
 #if LOG_LEVEL > 2
-#define LOG_INFO(...) printf("\x1b[0m" __VA_ARGS__)
+#define LOG_INFO(...) dbgLog(3, "\x1b[0m" __VA_ARGS__)
 #else
 #define LOG_INFO(...) (0)
 #endif
 
 // If enabled, print OS logs in green
 #if LOG_LEVEL > 3
-#define LOG_OS(...) printf("\x1b[32m" __VA_ARGS__)
+#define LOG_OS(...) dbgLog(4, "\x1b[32m" __VA_ARGS__)
 #else
 #define LOG_OS(...) (0)
 #endif

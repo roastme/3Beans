@@ -87,3 +87,18 @@ $(BUILD):
 clean:
 	rm -rf $(BUILD)
 	rm -f $(NAME)
+
+# Headless frontend (no window or audio; use the debug interface to control it)
+HL_NAME := 3beans-headless
+HL_BUILD := build-headless
+HL_SRCS := $(filter-out src/desktop,$(SRCS)) src/headless
+HL_OFILES := $(patsubst %.cpp,$(HL_BUILD)/%.o,$(foreach dir,$(HL_SRCS),$(wildcard $(dir)/*.cpp)))
+
+headless: $(HL_NAME)
+
+$(HL_NAME): $(HL_OFILES)
+	$(CXX) -o $@ $(ARGS) $^ $(shell pkg-config --libs epoxy) -lGL -lpthread
+
+$(HL_BUILD)/%.o: %.cpp $(HFILES)
+	@mkdir -p $(dir $@)
+	$(CXX) -c -o $@ $(ARGS) $(shell pkg-config --cflags epoxy) $<

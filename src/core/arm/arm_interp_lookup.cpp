@@ -490,10 +490,10 @@ int (ArmInterp::*ArmInterp::armInstrs[])(uint32_t) = {
     &ArmInterp::strbOfrmar, &ArmInterp::unkArm, &ArmInterp::strbOfrmrr, &ArmInterp::unkArm, // 0x744-0x747
     &ArmInterp::strbOfrmll, &ArmInterp::unkArm, &ArmInterp::strbOfrmlr, &ArmInterp::unkArm, // 0x748-0x74B
     &ArmInterp::strbOfrmar, &ArmInterp::unkArm, &ArmInterp::strbOfrmrr, &ArmInterp::unkArm, // 0x74C-0x74F
-    &ArmInterp::ldrbOfrmll, &ArmInterp::unkArm, &ArmInterp::ldrbOfrmlr, &ArmInterp::unkArm, // 0x750-0x753
+    &ArmInterp::ldrbOfrmll, &ArmInterp::smmla, &ArmInterp::ldrbOfrmlr, &ArmInterp::smmlar, // 0x750-0x753
     &ArmInterp::ldrbOfrmar, &ArmInterp::unkArm, &ArmInterp::ldrbOfrmrr, &ArmInterp::unkArm, // 0x754-0x757
     &ArmInterp::ldrbOfrmll, &ArmInterp::unkArm, &ArmInterp::ldrbOfrmlr, &ArmInterp::unkArm, // 0x758-0x75B
-    &ArmInterp::ldrbOfrmar, &ArmInterp::unkArm, &ArmInterp::ldrbOfrmrr, &ArmInterp::unkArm, // 0x75C-0x75F
+    &ArmInterp::ldrbOfrmar, &ArmInterp::smmls, &ArmInterp::ldrbOfrmrr, &ArmInterp::smmlsr, // 0x75C-0x75F
     &ArmInterp::strbPrrmll, &ArmInterp::unkArm, &ArmInterp::strbPrrmlr, &ArmInterp::unkArm, // 0x760-0x763
     &ArmInterp::strbPrrmar, &ArmInterp::unkArm, &ArmInterp::strbPrrmrr, &ArmInterp::unkArm, // 0x764-0x767
     &ArmInterp::strbPrrmll, &ArmInterp::unkArm, &ArmInterp::strbPrrmlr, &ArmInterp::unkArm, // 0x768-0x76B

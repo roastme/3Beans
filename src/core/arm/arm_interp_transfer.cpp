@@ -741,10 +741,9 @@ int ArmInterp::ldmdaU(uint32_t opcode) { // LDMDA Rn, <Rlist>^
     // User block load, post-decrement without writeback; normal registers if branching
     uint8_t m = bitCount[opcode & 0xFF] + bitCount[(opcode >> 8) & 0xFF];
     uint32_t op0 = *registers[(opcode >> 16) & 0xF] - (m << 2);
-    uint32_t **regs = &registers[(~opcode & BIT(15)) >> 11];
     for (int i = 0; i < 16; i++) {
         if (~opcode & BIT(i)) continue;
-        *regs[i] = core.cp15.read<uint32_t>(id, op0 += 4);
+        *(opcode & BIT(15) ? registers[i] : &registersUsr[i]) = core.cp15.read<uint32_t>(id, op0 += 4);
     }
 
     // Handle pipelining and mode/THUMB switching
@@ -770,10 +769,9 @@ int ArmInterp::ldmiaU(uint32_t opcode) { // LDMIA Rn, <Rlist>^
     // User block load, post-increment without writeback; normal registers if branching
     uint8_t m = bitCount[opcode & 0xFF] + bitCount[(opcode >> 8) & 0xFF];
     uint32_t op0 = *registers[(opcode >> 16) & 0xF];
-    uint32_t **regs = &registers[(~opcode & BIT(15)) >> 11];
     for (int i = 0; i < 16; i++) {
         if (~opcode & BIT(i)) continue;
-        *regs[i] = core.cp15.read<uint32_t>(id, op0);
+        *(opcode & BIT(15) ? registers[i] : &registersUsr[i]) = core.cp15.read<uint32_t>(id, op0);
         op0 += 4;
     }
 
@@ -801,10 +799,9 @@ int ArmInterp::ldmdbU(uint32_t opcode) { // LDMDB Rn, <Rlist>^
     // User block load, pre-decrement without writeback; normal registers if branching
     uint8_t m = bitCount[opcode & 0xFF] + bitCount[(opcode >> 8) & 0xFF];
     uint32_t op0 = *registers[(opcode >> 16) & 0xF] - (m << 2);
-    uint32_t **regs = &registers[(~opcode & BIT(15)) >> 11];
     for (int i = 0; i < 16; i++) {
         if (~opcode & BIT(i)) continue;
-        *regs[i] = core.cp15.read<uint32_t>(id, op0);
+        *(opcode & BIT(15) ? registers[i] : &registersUsr[i]) = core.cp15.read<uint32_t>(id, op0);
         op0 += 4;
     }
 
@@ -832,10 +829,9 @@ int ArmInterp::ldmibU(uint32_t opcode) { // LDMIB Rn, <Rlist>^
     // User block load, pre-increment without writeback; normal registers if branching
     uint8_t m = bitCount[opcode & 0xFF] + bitCount[(opcode >> 8) & 0xFF];
     uint32_t op0 = *registers[(opcode >> 16) & 0xF];
-    uint32_t **regs = &registers[(~opcode & BIT(15)) >> 11];
     for (int i = 0; i < 16; i++) {
         if (~opcode & BIT(i)) continue;
-        *regs[i] = core.cp15.read<uint32_t>(id, op0 += 4);
+        *(opcode & BIT(15) ? registers[i] : &registersUsr[i]) = core.cp15.read<uint32_t>(id, op0 += 4);
     }
 
     // Handle pipelining and mode/THUMB switching
@@ -862,10 +858,9 @@ int ArmInterp::ldmdaUW(uint32_t opcode) { // LDMDA Rn!, <Rlist>^
     uint8_t m = bitCount[opcode & 0xFF] + bitCount[(opcode >> 8) & 0xFF];
     uint8_t op0 = (opcode >> 16) & 0xF;
     uint32_t address = (*registers[op0] -= (m << 2));
-    uint32_t **regs = &registers[(~opcode & BIT(15)) >> 11];
     for (int i = 0; i < 16; i++) {
         if (~opcode & BIT(i)) continue;
-        *regs[i] = core.cp15.read<uint32_t>(id, address += 4);
+        *(opcode & BIT(15) ? registers[i] : &registersUsr[i]) = core.cp15.read<uint32_t>(id, address += 4);
     }
 
     // Load the writeback value if it's not last or is the only listed register
@@ -898,10 +893,9 @@ int ArmInterp::ldmiaUW(uint32_t opcode) { // LDMIA Rn!, <Rlist>^
     uint8_t m = bitCount[opcode & 0xFF] + bitCount[(opcode >> 8) & 0xFF];
     uint8_t op0 = (opcode >> 16) & 0xF;
     uint32_t address = (*registers[op0] += (m << 2)) - (m << 2);
-    uint32_t **regs = &registers[(~opcode & BIT(15)) >> 11];
     for (int i = 0; i < 16; i++) {
         if (~opcode & BIT(i)) continue;
-        *regs[i] = core.cp15.read<uint32_t>(id, address);
+        *(opcode & BIT(15) ? registers[i] : &registersUsr[i]) = core.cp15.read<uint32_t>(id, address);
         address += 4;
     }
 
@@ -936,10 +930,9 @@ int ArmInterp::ldmdbUW(uint32_t opcode) { // LDMDB Rn!, <Rlist>^
     uint8_t m = bitCount[opcode & 0xFF] + bitCount[(opcode >> 8) & 0xFF];
     uint8_t op0 = (opcode >> 16) & 0xF;
     uint32_t address = (*registers[op0] -= (m << 2));
-    uint32_t **regs = &registers[(~opcode & BIT(15)) >> 11];
     for (int i = 0; i < 16; i++) {
         if (~opcode & BIT(i)) continue;
-        *regs[i] = core.cp15.read<uint32_t>(id, address);
+        *(opcode & BIT(15) ? registers[i] : &registersUsr[i]) = core.cp15.read<uint32_t>(id, address);
         address += 4;
     }
 
@@ -974,10 +967,9 @@ int ArmInterp::ldmibUW(uint32_t opcode) { // LDMIB Rn!, <Rlist>^
     uint8_t m = bitCount[opcode & 0xFF] + bitCount[(opcode >> 8) & 0xFF];
     uint8_t op0 = (opcode >> 16) & 0xF;
     uint32_t address = (*registers[op0] += (m << 2)) - (m << 2);
-    uint32_t **regs = &registers[(~opcode & BIT(15)) >> 11];
     for (int i = 0; i < 16; i++) {
         if (~opcode & BIT(i)) continue;
-        *regs[i] = core.cp15.read<uint32_t>(id, address += 4);
+        *(opcode & BIT(15) ? registers[i] : &registersUsr[i]) = core.cp15.read<uint32_t>(id, address += 4);
     }
 
     // Load the writeback value if it's not last or is the only listed register
@@ -1641,6 +1633,7 @@ int ArmInterp::strSpT(uint16_t opcode) { // STR Rd,[SP,#i]
 
 int ArmInterp::ldmiaT(uint16_t opcode) { // LDMIA Rb!,<Rlist>
     // Block load, post-increment with writeback (THUMB)
+    abortReg = (opcode >> 8) & 0x7, abortBase = *registers[abortReg]; // Restore Rb if a load faults so the LDMIA can restart
     uint8_t m = bitCount[opcode & 0xFF];
     uint32_t *op0 = registers[(opcode >> 8) & 0x7];
     uint32_t address = (*op0 += (m << 2)) - (m << 2);
@@ -1668,6 +1661,7 @@ int ArmInterp::stmiaT(uint16_t opcode) { // STMIA Rb!,<Rlist>
 
 int ArmInterp::popT(uint16_t opcode) { // POP <Rlist>
     // SP-relative block load, post-increment with writeback (THUMB)
+    abortReg = 13, abortBase = *registers[13]; // Restore sp if a load faults so the POP can restart
     uint8_t m = bitCount[opcode & 0xFF];
     for (int i = 0; i < 8; i++) {
         if (~opcode & BIT(i)) continue;
@@ -1679,6 +1673,7 @@ int ArmInterp::popT(uint16_t opcode) { // POP <Rlist>
 
 int ArmInterp::pushT(uint16_t opcode) { // PUSH <Rlist>
     // SP-relative block store, pre-decrement with writeback (THUMB)
+    abortReg = 13, abortBase = *registers[13]; // Restore sp if a store faults so the PUSH can restart
     uint8_t m = bitCount[opcode & 0xFF];
     uint32_t address = (*registers[13] -= (m << 2));
     for (int i = 0; i < 8; i++) {
@@ -1691,6 +1686,7 @@ int ArmInterp::pushT(uint16_t opcode) { // PUSH <Rlist>
 
 int ArmInterp::popPcT(uint16_t opcode) { // POP <Rlist>,PC
     // SP-relative block load, post-increment with writeback (THUMB)
+    abortReg = 13, abortBase = *registers[13]; // Restore sp if a load faults so the POP can restart
     uint8_t m = bitCount[opcode & 0xFF] + 1;
     for (int i = 0; i < 8; i++) {
         if (~opcode & BIT(i)) continue;
@@ -1708,6 +1704,7 @@ int ArmInterp::popPcT(uint16_t opcode) { // POP <Rlist>,PC
 
 int ArmInterp::pushLrT(uint16_t opcode) { // PUSH <Rlist>,LR
     // SP-relative block store, pre-decrement with writeback (THUMB)
+    abortReg = 13, abortBase = *registers[13]; // Restore sp if a store faults so the PUSH can restart
     uint8_t m = bitCount[opcode & 0xFF] + 1;
     uint32_t address = (*registers[13] -= (m << 2));
     for (int i = 0; i < 8; i++) {

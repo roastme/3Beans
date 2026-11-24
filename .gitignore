@@ -1,7 +1,23 @@
 /.idea
+
+# Build trees and binaries
 /build
-/3beans
+/build-*
+/3beans*
+*.o
+
+# Local scratch/backups
+*.orig
+*.rej
+*.log
+/wxlib
+
+# Machine-specific notes (not for publication)
+/AGENTS.md
+
+# Files dumped from a 3DS
 boot9.bin
 boot11.bin
 nand.bin
 sd.img
+3beans.ini

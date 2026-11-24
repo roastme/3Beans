@@ -26,17 +26,48 @@ template uint32_t Cp15::read(CpuId, uint32_t);
 template void Cp15::write(CpuId, uint32_t, uint8_t);
 template void Cp15::write(CpuId, uint32_t, uint16_t);
 template void Cp15::write(CpuId, uint32_t, uint32_t);
+template uint16_t Cp15::fetch(CpuId, uint32_t);
+template uint32_t Cp15::fetch(CpuId, uint32_t);
+
+bool Cp15::isUser(CpuId id) {
+    // Check if an ARM11 core is in user mode, which affects MMU permissions
+    return (core.arms[id].cpsr & 0x1F) == 0x10;
+}
+
+void Cp15::abort(CpuId id, uint32_t address, uint32_t fsr, bool write, bool exec) {
+    // Set the fault status and address registers, and abort the current instruction
+    if (exec) {
+        ifsrRegs[id] = fsr;
+        ifarRegs[id] = address;
+    }
+    else {
+        dfsrRegs[id] = fsr | (write ? BIT(11) : 0);
+        farRegs[id] = address;
+    }
+    throw MmuAbort{exec};
+}
 
 uint8_t *Cp15::getReadPtr(CpuId id, uint32_t address) {
-    // Get a readable memory pointer to use for caching
+    // Get a readable memory pointer to use for caching, checking execute permissions on the ARM11
     if (id == ARM9) return tcmMap[address >> 12].read;
     if (!mmuEnables[id]) return core.memory.memMap11[address >> 12].read;
     MmuMap &map = mmuMaps[id][address >> 12];
-    if (map.tag != mmuTags[id]) updateEntry(id, address);
+    if (map.tag != mmuTags[id]) updateEntry(id, address, false, true);
+    if (!(map.perm & (isUser(id) ? PERM_UX : PERM_PX))) abort(id, address, map.fsr, false, true);
     return map.read;
 }
 
-uint32_t Cp15::mmuTranslate(CpuId id, uint32_t address) {
+template <typename T> T Cp15::fetch(CpuId id, uint32_t address) {
+    // Read an opcode, checking execute permissions on the ARM11
+    if (id != ARM9 && mmuEnables[id]) {
+        MmuMap &map = mmuMaps[id][address >> 12];
+        if (map.tag != mmuTags[id]) updateEntry(id, address, false, true);
+        if (!(map.perm & (isUser(id) ? PERM_UX : PERM_PX))) abort(id, address, map.fsr, false, true);
+    }
+    return read<T>(id, address);
+}
+
+int Cp15::mmuWalk(CpuId id, uint32_t address, uint32_t &phys, uint8_t &perm, uint8_t &fsr) {
     // Check control value X to determine the table base address
     uint32_t base;
     if (tlbCtrlRegs[id]) {
@@ -49,30 +80,69 @@ uint32_t Cp15::mmuTranslate(CpuId id, uint32_t address) {
         base = (tlbBase0Regs[id] & 0xFFFFC000);
     }
 
-    // Translate a virtual address to physical using MMU translation tables
-    // TODO: handle all the extra bits
+    // Read the first-level descriptor; faults and reserved types are section translation faults
     uint32_t entry = core.memory.read<uint32_t>(id, base + ((address >> 18) & 0x3FFC));
+    uint32_t domain = (entry >> 5) & 0xF;
+    bool section = ((entry & 0x3) == 0x2);
+    if (section && (entry & BIT(18))) domain = 0; // Supersection
     switch (entry & 0x3) {
-    case 0x1: // Coarse
+    case 0x0: case 0x3:
+        return 0x5;
+    }
+
+    // Check the domain access control for the descriptor's domain
+    uint32_t access = (domainRegs[id] >> (domain << 1)) & 0x3;
+    if (access == 0x0 || access == 0x2)
+        return (domain << 4) | (section ? 0x9 : 0xB);
+
+    // Find the physical address and access control bits
+    uint32_t ap, apx, xn;
+    if (section) {
+        // Section or supersection
+        phys = (entry & BIT(18)) ? ((entry & 0xFF000000) | (address & 0xFFFFFF)) : ((entry & 0xFFF00000) | (address & 0xFFFFF));
+        ap = (entry >> 10) & 0x3;
+        apx = (entry >> 15) & 0x1;
+        xn = (entry >> 4) & 0x1;
+    }
+    else {
+        // Read the second-level descriptor of a coarse page table
         entry = core.memory.read<uint32_t>(id, (entry & 0xFFFFFC00) + ((address >> 10) & 0x3FC));
         switch (entry & 0x3) {
         case 0x1: // 64KB large page
-            return (entry & 0xFFFF0000) | (address & 0xFFFF);
+            phys = (entry & 0xFFFF0000) | (address & 0xFFFF);
+            xn = (entry >> 15) & 0x1;
+            break;
         case 0x2: case 0x3: // 4KB small page
-            return (entry & 0xFFFFF000) | (address & 0xFFF);
+            phys = (entry & 0xFFFFF000) | (address & 0xFFF);
+            xn = entry & 0x1;
+            break;
+        default:
+            return (domain << 4) | 0x7;
         }
-        break;
-
-    case 0x2: // Section
-        if (entry & BIT(18)) // 16MB supersection
-            return (entry & 0xFF000000) | (address & 0xFFFFFF);
-        else // 1MB section
-            return (entry & 0xFFF00000) | (address & 0xFFFFF);
+        ap = (entry >> 4) & 0x3; // Subpage 0 (the AP bits are replicated by Linux)
+        apx = (entry >> 9) & 0x1;
     }
 
-    // Catch unhandled translation table entries
-    LOG_CRIT("Unhandled ARM11 core %d MMU translation fault at 0x%X\n", id, address);
-    return address;
+    // Build permission bits from the access control, with managers bypassing all checks
+    perm = 0;
+    if (access == 0x3) {
+        perm = PERM_PR | PERM_PW | PERM_PX | PERM_UR | PERM_UW | PERM_UX;
+    }
+    else {
+        switch ((apx << 2) | ap) {
+            case 0x1: perm = PERM_PR | PERM_PW; break; // Privileged only
+            case 0x2: perm = PERM_PR | PERM_PW | PERM_UR; break; // User read-only
+            case 0x3: perm = PERM_PR | PERM_PW | PERM_UR | PERM_UW; break; // Full access
+            case 0x5: perm = PERM_PR; break; // Privileged read-only
+            case 0x6: case 0x7: perm = PERM_PR | PERM_UR; break; // Read-only
+        }
+        if (!xn) {
+            if (perm & PERM_PR) perm |= PERM_PX;
+            if (perm & PERM_UR) perm |= PERM_UX;
+        }
+    }
+    fsr = (domain << 4) | (section ? 0xD : 0xF);
+    return 0;
 }
 
 void Cp15::mmuInvalidate(CpuId id) {
@@ -83,14 +153,19 @@ void Cp15::mmuInvalidate(CpuId id) {
     mmuTags[id] = 1;
 }
 
-void Cp15::updateEntry(CpuId id, uint32_t address) {
-    // Cache an MMU read/write mapping with the current tag
+void Cp15::updateEntry(CpuId id, uint32_t address, bool write, bool exec) {
+    // Cache an MMU read/write mapping with the current tag, or abort without caching on a fault
     MmuMap &map = mmuMaps[id][address >> 12];
-    address = mmuTranslate(id, address);
-    map.read = core.memory.memMap11[address >> 12].read;
-    map.write = core.memory.memMap11[address >> 12].write;
-    map.memTag = &core.memory.memMap11[address >> 12].tag;
-    map.addr = (address & ~0xFFF);
+    uint32_t phys;
+    uint8_t perm, fsr;
+    if (int fault = mmuWalk(id, address, phys, perm, fsr))
+        abort(id, address, fault, write, exec);
+    map.read = core.memory.memMap11[phys >> 12].read;
+    map.write = core.memory.memMap11[phys >> 12].write;
+    map.memTag = &core.memory.memMap11[phys >> 12].tag;
+    map.addr = (phys & ~0xFFF);
+    map.perm = perm;
+    map.fsr = fsr;
     map.tag = mmuTags[id];
 }
 
@@ -117,6 +192,7 @@ void Cp15::updateMap9(uint32_t start, uint32_t end) {
 }
 
 template <typename T> T Cp15::read(CpuId id, uint32_t address) {
+    if (__builtin_expect(core.debug.watchOn, 0) && id != ARM9) core.debug.checkWatch(id, address, sizeof(T), false);
     // Get a pointer to mapped readable memory if it exists
     uint8_t *data;
     if (id == ARM9) {
@@ -127,7 +203,8 @@ template <typename T> T Cp15::read(CpuId id, uint32_t address) {
     else if (mmuEnables[id]) {
         // Read from ARM11 virtual memory, updating the cache if necessary
         MmuMap &map = mmuMaps[id][address >> 12];
-        if (map.tag != mmuTags[id]) updateEntry(id, address);
+        if (map.tag != mmuTags[id]) updateEntry(id, address, false, false);
+        if (!(map.perm & (isUser(id) ? PERM_UR : PERM_PR))) abort(id, address, map.fsr, false, false);
         if (!(data = map.read)) address = map.addr | (address & 0xFFF);
     }
     else {
@@ -148,6 +225,7 @@ template <typename T> T Cp15::read(CpuId id, uint32_t address) {
 }
 
 template <typename T> void Cp15::write(CpuId id, uint32_t address, T value) {
+    if (__builtin_expect(core.debug.watchOn, 0) && id != ARM9) core.debug.checkWatch(id, address, sizeof(T), true);
     // Get a pointer to mapped writable memory and adjust its tag to signal change
     uint8_t *data;
     if (id == ARM9) {
@@ -160,7 +238,8 @@ template <typename T> void Cp15::write(CpuId id, uint32_t address, T value) {
     else if (mmuEnables[id]) {
         // Write to ARM11 virtual memory, updating the cache if necessary
         MmuMap &map = mmuMaps[id][address >> 12];
-        if (map.tag != mmuTags[id]) updateEntry(id, address);
+        if (map.tag != mmuTags[id]) updateEntry(id, address, true, false);
+        if (!(map.perm & (isUser(id) ? PERM_UW : PERM_PW))) abort(id, address, map.fsr, true, false);
         if (!(data = map.write)) address = map.addr | (address & 0xFFF);
         (*map.memTag)++;
 
@@ -217,11 +296,21 @@ uint32_t Cp15::readReg(CpuId id, uint8_t cn, uint8_t cm, uint8_t cp) {
             case 0x000202: return 0x11221011; // ISA features 2
             case 0x000203: return 0x01102131; // ISA features 3
             case 0x000204: return 0x00000141; // ISA features 4
+            case 0x000205: return 0x00000000; // ISA features 5
+            case 0x0F0C00: case 0x0F0C01: case 0x0F0C02: case 0x0F0C03: return 0; // Performance monitor (stub)
             case 0x010000: return ctrlRegs[id]; // Control
+            case 0x010001: return auxCtrlRegs[id]; // Auxiliary control
+            case 0x010002: return coprocRegs[id]; // Coprocessor access control
             case 0x020000: return tlbBase0Regs[id]; // TLB base 0
             case 0x020001: return tlbBase1Regs[id]; // TLB base 1
             case 0x020002: return tlbCtrlRegs[id]; // TLB control
+            case 0x030000: return domainRegs[id]; // Domain access control
+            case 0x050000: return dfsrRegs[id]; // Data fault status
+            case 0x050001: return ifsrRegs[id]; // Instruction fault status
+            case 0x060000: return farRegs[id]; // Fault address
+            case 0x060002: return ifarRegs[id]; // Instruction fault address
             case 0x070400: return physAddrRegs[id]; // Physical address
+            case 0x0D0001: return contextIdRegs[id]; // Context ID
             case 0x0D0002: return threadIdRegs[id][0]; // Thread ID 0
             case 0x0D0003: return threadIdRegs[id][1]; // Thread ID 1
             case 0x0D0004: return threadIdRegs[id][2]; // Thread ID 2
@@ -250,20 +339,35 @@ void Cp15::writeReg(CpuId id, uint8_t cn, uint8_t cm, uint8_t cp, uint32_t value
     if (id != ARM9) { // ARM11
         switch ((cn << 16) | (cm << 8) | cp) {
             case 0x010000: return writeCtrl11(id, value); // Control
+            case 0x010001: auxCtrlRegs[id] = value; return; // Auxiliary control
+            case 0x010002: coprocRegs[id] = value; return; // Coprocessor access control
             case 0x020000: return writeTlbBase0(id, value); // TLB base 0
             case 0x020001: return writeTlbBase1(id, value); // TLB base 1
             case 0x020002: return writeTlbCtrl(id, value); // TLB control
+            case 0x030000: return writeDomain(id, value); // Domain access control
+            case 0x050000: dfsrRegs[id] = value; return; // Data fault status
+            case 0x050001: ifsrRegs[id] = value; return; // Instruction fault status
+            case 0x060000: farRegs[id] = value; return; // Fault address
+            case 0x060002: ifarRegs[id] = value; return; // Instruction fault address
             case 0x070004: return writeWfi(id, value); // Wait for interrupt
+            case 0x070500: return; // Invalidate i-cache (stub)
             case 0x070501: return; // Invalidate i-cache line (stub)
+            case 0x070504: return; // Flush prefetch buffer (stub)
+            case 0x070506: return; // Flush branch target cache (stub)
+            case 0x070600: return; // Invalidate d-cache (stub)
             case 0x070601: return; // Invalidate d-cache line (stub)
             case 0x070800: return writeAddrTrans(id, value); // Privileged read address translation
             case 0x070801: return writeAddrTrans(id, value); // Privileged write address translation
             case 0x070802: return writeAddrTrans(id, value); // User read address translation
             case 0x070803: return writeAddrTrans(id, value); // User write address translation
+            case 0x070A00: return; // Clean d-cache (stub)
             case 0x070A01: return; // Clean d-cache line (stub)
             case 0x070A04: return; // Data sync barrier (stub)
             case 0x070A05: return; // Data memory barrier (stub)
+            case 0x070E00: return; // Clean+invalidate d-cache (stub)
             case 0x070E01: return; // Clean+invalidate d-cache line (stub)
+            case 0x070F00: return; // Clean+invalidate unified cache (stub)
+            case 0x0F0C00: case 0x0F0C01: case 0x0F0C02: case 0x0F0C03: return; // Performance monitor (stub)
             case 0x080500: return mmuInvalidate(id); // Invalidate i-TLB (stub)
             case 0x080501: return mmuInvalidate(id); // Invalidate i-TLB by MVA+ASID (stub)
             case 0x080502: return mmuInvalidate(id); // Invalidate i-TLB by ASID (stub)
@@ -276,6 +380,7 @@ void Cp15::writeReg(CpuId id, uint8_t cn, uint8_t cm, uint8_t cp, uint32_t value
             case 0x080701: return mmuInvalidate(id); // Invalidate TLB by MVA+ASID (stub)
             case 0x080702: return mmuInvalidate(id); // Invalidate TLB by ASID (stub)
             case 0x080703: return mmuInvalidate(id); // Invalidate TLB by MVA (stub)
+            case 0x0D0001: contextIdRegs[id] = value; return; // Context ID
             case 0x0D0002: return writeThreadId(id, 0, value); // Thread ID 0
             case 0x0D0003: return writeThreadId(id, 1, value); // Thread ID 1
             case 0x0D0004: return writeThreadId(id, 2, value); // Thread ID 2
@@ -346,9 +451,20 @@ void Cp15::writeTlbCtrl(CpuId id, uint32_t value) {
 }
 
 void Cp15::writeAddrTrans(CpuId id, uint32_t value) {
-    // Translate a virtual address and store it in the physical address register
+    // Translate a virtual address and store it in the physical address register, or store a fault
     // TODO: handle read/write and privileged/user variants
-    physAddrRegs[id] = mmuTranslate(id, value);
+    uint32_t phys;
+    uint8_t perm, fsr;
+    if (int fault = mmuWalk(id, value, phys, perm, fsr))
+        physAddrRegs[id] = 1 | ((fault & 0x3F) << 1);
+    else
+        physAddrRegs[id] = phys;
+}
+
+void Cp15::writeDomain(CpuId id, uint32_t value) {
+    // Set a core's domain access control register; cached permissions depend on it
+    domainRegs[id] = value;
+    mmuInvalidate(id);
 }
 
 void Cp15::writeThreadId(CpuId id, int i, uint32_t value) {
@@ -384,4 +500,27 @@ void Cp15::writeItcm(CpuId id, uint32_t value) {
 
     // Update the memory map at the old and new ITCM areas
     updateMap9(0, std::max(oldSize, itcmSize));
+}
+
+bool Cp15::translate(CpuId id, uint32_t address, uint32_t &phys) {
+    // Translate a virtual address for debugging, without touching caches or raising aborts
+    if (id == ARM9 || !mmuEnables[id]) {
+        phys = address;
+        return true;
+    }
+    uint8_t perm, fsr;
+    return mmuWalk(id, address, phys, perm, fsr) == 0;
+}
+
+uint32_t Cp15::debugReg(CpuId id, int which) {
+    if (id == ARM9) return 0;
+    switch (which) {
+        case 0: return tlbBase0Regs[id];
+        case 1: return tlbBase1Regs[id];
+        case 2: return dfsrRegs[id];
+        case 3: return farRegs[id];
+        case 4: return ifsrRegs[id];
+        case 5: return ifarRegs[id];
+        default: return ctrlRegs[id];
+    }
 }

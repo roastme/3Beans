@@ -30,12 +30,20 @@ public:
 
     void updateMcuRam();
     void mcuInterrupt(uint32_t mask);
+    void mcuLcdEvent();
 
     uint8_t readBusData(int i) { return i2cBusData[i]; }
     uint8_t readBusCnt(int i) { return i2cBusCnt[i]; }
+    uint16_t readGpio3Data();
+    uint16_t readGpio3Dir() { return gpio3Dir; }
+    uint16_t readGpio3Edge() { return gpio3Edge; }
+    uint16_t readGpio3IrqEnable() { return gpio3IrqEnable; }
 
     void writeBusData(int i, uint8_t value);
     void writeBusCnt(int i, uint8_t value);
+    void writeGpio3Dir(uint16_t mask, uint16_t value);
+    void writeGpio3Edge(uint16_t mask, uint16_t value);
+    void writeGpio3IrqEnable(uint16_t mask, uint16_t value);
 
 private:
     Core &core;
@@ -51,6 +59,10 @@ private:
 
     uint32_t mcuIrqFlags = 0;
     uint32_t mcuIrqMask = 0;
+    uint32_t mcuLcdPending = 0;
+    uint16_t gpio3Dir = 0;
+    uint16_t gpio3Edge = 0;
+    uint16_t gpio3IrqEnable = 0;
     uint8_t mcuRamIdx = 0;
     uint8_t mcuRamData[0xC8] = {};
 

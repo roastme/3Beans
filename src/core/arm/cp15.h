@@ -24,10 +24,22 @@
 
 class Core;
 
+// Cached MMU permission bits: privileged/user read, write, and execute
+enum MmuPerm {
+    PERM_PR = BIT(0), PERM_PW = BIT(1), PERM_PX = BIT(2),
+    PERM_UR = BIT(3), PERM_UW = BIT(4), PERM_UX = BIT(5)
+};
+
 struct MmuMap {
     uint8_t *read, *write;
     uint32_t *memTag;
     uint32_t addr, tag;
+    uint8_t perm, fsr; // Permission bits and FSR (domain + permission fault type) for the entry
+};
+
+// Thrown by the MMU when an access faults; fault registers are set before throwing
+struct MmuAbort {
+    bool instr;
 };
 
 struct TcmMap {
@@ -41,6 +53,13 @@ public:
 
     Cp15(Core &core): core(core) {}
     uint8_t *getReadPtr(CpuId id, uint32_t address);
+    template <typename T> T fetch(CpuId id, uint32_t address);
+    void setIfar(CpuId id, uint32_t address) { ifarRegs[id] = address; }
+
+    // Debug accessors (no side effects)
+    bool translate(CpuId id, uint32_t address, uint32_t &phys);
+    uint32_t contextId(CpuId id) { return contextIdRegs[id]; }
+    uint32_t debugReg(CpuId id, int which); // 0 ttbr0, 1 ttbr1, 2 dfsr, 3 far, 4 ifsr, 5 ifar, 6 ctrl
 
     void mmuInvalidate(CpuId id);
     void updateMap9(uint32_t start, uint32_t end);
@@ -72,12 +91,22 @@ private:
     uint32_t tlbBase1Regs[MAX_CPUS - 1] = {};
     uint32_t tlbCtrlRegs[MAX_CPUS - 1] = {};
     uint32_t physAddrRegs[MAX_CPUS - 1] = {};
+    uint32_t domainRegs[MAX_CPUS - 1] = {};
+    uint32_t dfsrRegs[MAX_CPUS - 1] = {};
+    uint32_t ifsrRegs[MAX_CPUS - 1] = {};
+    uint32_t farRegs[MAX_CPUS - 1] = {};
+    uint32_t ifarRegs[MAX_CPUS - 1] = {};
+    uint32_t auxCtrlRegs[MAX_CPUS - 1] = {};
+    uint32_t coprocRegs[MAX_CPUS - 1] = {};
     uint32_t threadIdRegs[MAX_CPUS - 1][3] = {};
+    uint32_t contextIdRegs[MAX_CPUS - 1] = {};
     uint32_t dtcmReg = 0;
     uint32_t itcmReg = 0;
 
-    uint32_t mmuTranslate(CpuId id, uint32_t address);
-    void updateEntry(CpuId id, uint32_t address);
+    int mmuWalk(CpuId id, uint32_t address, uint32_t &phys, uint8_t &perm, uint8_t &fsr);
+    void updateEntry(CpuId id, uint32_t address, bool write, bool exec);
+    bool isUser(CpuId id);
+    [[noreturn]] void abort(CpuId id, uint32_t address, uint32_t fsr, bool write, bool exec);
 
     void writeCtrl11(CpuId id, uint32_t value);
     void writeCtrl9(CpuId id, uint32_t value);
@@ -85,6 +114,7 @@ private:
     void writeTlbBase1(CpuId id, uint32_t value);
     void writeTlbCtrl(CpuId id, uint32_t value);
     void writeAddrTrans(CpuId id, uint32_t value);
+    void writeDomain(CpuId id, uint32_t value);
     void writeThreadId(CpuId id, int i, uint32_t value);
     void writeWfi(CpuId id, uint32_t value);
     void writeDtcm(CpuId id, uint32_t value);

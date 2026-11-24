@@ -32,6 +32,7 @@ enum FrameEvent {
     PAUSE,
     RESTART,
     STOP,
+    CLOSE_LID,
     SET_HARDWARE,
     FPS_LIMITER,
     CART_AUTO_BOOT,
@@ -50,6 +51,7 @@ EVT_MENU(QUIT, b3Frame::quit)
 EVT_MENU(PAUSE, b3Frame::pause)
 EVT_MENU(RESTART, b3Frame::restart)
 EVT_MENU(STOP, b3Frame::stop)
+EVT_MENU(CLOSE_LID, b3Frame::closeLid)
 EVT_MENU(SET_HARDWARE, b3Frame::setHardware)
 EVT_MENU(FPS_LIMITER, b3Frame::fpsLimiter)
 EVT_MENU(CART_AUTO_BOOT, b3Frame::cartAutoBoot)
@@ -76,6 +78,8 @@ b3Frame::b3Frame(): wxFrame(nullptr, wxID_ANY, "3Beans") {
     systemMenu->Append(PAUSE, "&Pause");
     systemMenu->Append(RESTART, "&Restart");
     systemMenu->Append(STOP, "&Stop");
+    systemMenu->AppendSeparator();
+    systemMenu->AppendCheckItem(CLOSE_LID, "Close &Lid\tCtrl+L");
     systemMenu->AppendSeparator();
     systemMenu->Append(SET_HARDWARE, "&Set Hardware");
 
@@ -145,6 +149,10 @@ b3Frame::b3Frame(): wxFrame(nullptr, wxID_ANY, "3Beans") {
         joystick = nullptr;
         timer = nullptr;
     }
+
+    // Start the core right away when booting a FIRM directly
+    if (!Settings::firmPath.empty())
+        CallAfter([this]() { startCore(true); });
 }
 
 void b3Frame::Refresh() {
@@ -175,6 +183,7 @@ void b3Frame::startCore(bool full) {
             mutex.lock();
             core = new Core(cartPath, glSupport ? &((b3CanvasOgl*)canvas)->contextFunc : nullptr);
             mutex.unlock();
+            systemMenu->Check(CLOSE_LID, false); // A new core starts with the lid open
         }
         catch (CoreError e) {
             core = nullptr;
@@ -360,6 +369,13 @@ void b3Frame::restart(wxCommandEvent &event) {
 void b3Frame::stop(wxCommandEvent &event) {
     // Stop the core
     stopCore(true);
+}
+
+void b3Frame::closeLid(wxCommandEvent &event) {
+    // Close or open the console's shell, which sleeps or wakes a system that supports it
+    mutex.lock();
+    if (core) core->input.setLid(systemMenu->IsChecked(CLOSE_LID));
+    mutex.unlock();
 }
 
 void b3Frame::setHardware(wxCommandEvent &event) {

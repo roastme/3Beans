@@ -45,8 +45,32 @@ void I2c::updateMcuRam() {
 
 void I2c::mcuInterrupt(uint32_t mask) {
     // Set MCU interrupt flags and trigger if a set flag is enabled
-    if ((mcuIrqFlags |= mask) & ~mcuIrqMask)
+    // An unmasked flag also drives GPIO3 pin 9, which is a PDN wake source
+    if ((mcuIrqFlags |= mask) & ~mcuIrqMask) {
         core.interrupts.sendInterrupt(ARM11, 0x71);
+        core.interrupts.pdnWake(BIT(26));
+    }
+}
+
+uint16_t I2c::readGpio3Data() {
+    // Keep the active-low IR interrupt line (pin 1) idle, and drive the active-low
+    // MCU interrupt line (pin 9) low while an unmasked MCU flag is set
+    return BIT(1) | ((mcuIrqFlags & ~mcuIrqMask) ? 0 : BIT(9));
+}
+
+void I2c::writeGpio3Dir(uint16_t mask, uint16_t value) {
+    // Write to the GPIO3 direction register
+    gpio3Dir = (gpio3Dir & ~mask) | (value & mask);
+}
+
+void I2c::writeGpio3Edge(uint16_t mask, uint16_t value) {
+    // Write to the GPIO3 interrupt edge register
+    gpio3Edge = (gpio3Edge & ~mask) | (value & mask);
+}
+
+void I2c::writeGpio3IrqEnable(uint16_t mask, uint16_t value) {
+    // Write to the GPIO3 interrupt enable register
+    gpio3IrqEnable = (gpio3IrqEnable & ~mask) | (value & mask);
 }
 
 uint8_t I2c::readMcu() {
@@ -59,7 +83,7 @@ uint8_t I2c::readMcu() {
         case 0x00: return 0x13; // Version high
         case 0x01: return 0x41; // Version low
         case 0x0B: return 0x64; // Battery percent
-        case 0x0F: return 0x02; // Power flags
+        case 0x0F: return core.input.isLidClosed() ? 0x00 : 0x02; // Power flags (bit 1: shell open)
         case 0x10: return readMcuIrqFlags(0);
         case 0x11: return readMcuIrqFlags(1);
         case 0x12: return readMcuIrqFlags(2);
@@ -159,13 +183,26 @@ void I2c::writeMcuIrqMask(int i, uint8_t value) {
 }
 
 void I2c::writeMcuLcdPower(uint8_t value) {
-    // Fake LCD power control by simply firing interrupts
-    if (value & BIT(0)) mcuInterrupt(BIT(24) | BIT(26) | BIT(28)); // Power off
-    if (value & BIT(1)) mcuInterrupt(BIT(25)); // LCD power on
-    if (value & BIT(2)) mcuInterrupt(BIT(26)); // Bottom backlight off
-    if (value & BIT(3)) mcuInterrupt(BIT(27)); // Bottom backlight on
-    if (value & BIT(4)) mcuInterrupt(BIT(28)); // Top backlight off
-    if (value & BIT(5)) mcuInterrupt(BIT(29)); // Top backlight on
+    // Fake LCD power control by firing the acknowledgement interrupts
+    // The real MCU sends them a few milliseconds after the write, once the panel
+    // or backlight has actually switched, so deliver them after a 20ms delay
+    uint32_t mask = 0;
+    if (value & BIT(0)) mask |= BIT(24) | BIT(26) | BIT(28); // Power off
+    if (value & BIT(1)) mask |= BIT(25); // LCD power on
+    if (value & BIT(2)) mask |= BIT(26); // Bottom backlight off
+    if (value & BIT(3)) mask |= BIT(27); // Bottom backlight on
+    if (value & BIT(4)) mask |= BIT(28); // Top backlight off
+    if (value & BIT(5)) mask |= BIT(29); // Top backlight on
+    if (!mask) return;
+    if (!mcuLcdPending) core.schedule(MCU_LCD_EVENT, 268111856 / 50);
+    mcuLcdPending |= mask;
+}
+
+void I2c::mcuLcdEvent() {
+    // Deliver the delayed LCD power and backlight acknowledgements
+    uint32_t mask = mcuLcdPending;
+    mcuLcdPending = 0;
+    mcuInterrupt(mask);
 }
 
 void I2c::writeMcuRamIdx(uint8_t value) {

@@ -30,11 +30,13 @@ namespace Settings {
     int gpuFragShader = 0;
     int systemType = 0;
     int unitType = 0;
+    int debugPort = 0;
 
     std::string boot11Path = "boot11.bin";
     std::string boot9Path = "boot9.bin";
     std::string nandPath = "nand.bin";
     std::string sdPath = "sd.img";
+    std::string firmPath = "";
     std::string basePath = ".";
 
     std::vector<Setting> settings = {
@@ -47,10 +49,12 @@ namespace Settings {
         Setting("gpuFragShader", &gpuFragShader, false),
         Setting("systemType", &systemType, false),
         Setting("unitType", &unitType, false),
+        Setting("debugPort", &debugPort, false),
         Setting("boot11Path", &boot11Path, true),
         Setting("boot9Path", &boot9Path, true),
         Setting("nandPath", &nandPath, true),
-        Setting("sdPath", &sdPath, true)
+        Setting("sdPath", &sdPath, true),
+        Setting("firmPath", &firmPath, true)
     };
 }
 

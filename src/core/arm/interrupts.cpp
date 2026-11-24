@@ -68,6 +68,15 @@ void Interrupts::interrupt(CpuId id) {
 void Interrupts::halt(CpuId id, uint8_t type) {
     // Halt a CPU and check if all ARM11 cores have been halted
     core.arms[id].halt(BIT(type));
+
+    // Put all ARM11 cores to sleep if an ARM11 core waits for interrupt after requesting PDN sleep
+    // They stay halted through interrupts until an enabled wake event clears the sleep bit
+    if (id != ARM9 && (pdnCnt & BIT(0)) && !(core.arms[ARM11A].halted & BIT(2))) {
+        LOG_INFO("Entering PDN sleep (wake enable 0x%X)\n", pdnWakeEnable);
+        for (int i = ARM11A; i <= ARM11D; i++)
+            core.arms[i].halt(BIT(2));
+    }
+
     if (id != ARM9 && core.arms[ARM11A].halted && core.arms[ARM11B].halted &&
             core.arms[ARM11C].halted && core.arms[ARM11D].halted) {
         // Check if the current clock/FCRAM mode changed
@@ -97,6 +106,19 @@ void Interrupts::halt(CpuId id, uint8_t type) {
     cfg11MpBootcnt[id - 2] &= ~BIT(4);
     LOG_INFO("Disabling ARM11 core %d\n", id);
     core.schedule(UPDATE_RUN_FUNC, 0);
+}
+
+void Interrupts::pdnWake(uint32_t reason) {
+    // Wake the ARM11 cores from PDN sleep if the event is enabled as a wake source
+    if (!(pdnCnt & BIT(0)) || !(reason &= pdnWakeEnable)) return;
+    LOG_INFO("Waking from PDN sleep (reason 0x%X)\n", reason);
+    pdnCnt &= ~BIT(0);
+    pdnWakeReason |= reason;
+    for (int i = ARM11A; i <= ARM11D; i++)
+        core.arms[i].unhalt(BIT(2));
+
+    // Deliver interrupts that became pending while asleep
+    checkInterrupt(ARM11);
 }
 
 uint16_t Interrupts::readCfg11Socinfo() {
@@ -184,6 +206,27 @@ void Interrupts::writeCfg11MpBootcnt(int i, uint8_t value) {
     cfg11MpBootcnt[i - 2] |= (BIT(4) | BIT(5));
     LOG_INFO("Enabling ARM11 core %d\n", i);
     core.schedule(UPDATE_RUN_FUNC, 0);
+}
+
+void Interrupts::writePdnCnt(uint16_t mask, uint16_t value) {
+    // Request PDN sleep, which starts once an ARM11 core waits for interrupt
+    // TODO: report VRAM power-off in bit 15 and reset the graphics blocks on wake
+    if (mask & value & BIT(0)) pdnCnt |= BIT(0);
+}
+
+void Interrupts::writePdnWakeEnable(uint32_t mask, uint32_t value) {
+    // Write to the PDN wake event enable register
+    pdnWakeEnable = (pdnWakeEnable & ~mask) | (value & mask);
+}
+
+void Interrupts::writePdnWakeReason(uint32_t mask, uint32_t value) {
+    // Acknowledge PDN wake reasons by writing ones
+    pdnWakeReason &= ~(value & mask);
+}
+
+void Interrupts::writeMpScuStatus(uint32_t mask, uint32_t value) {
+    // Write to the SCU CPU power status register (normal/dormant/off per core)
+    mpScuStatus = (mpScuStatus & ~mask) | (value & mask & 0xFF);
 }
 
 void Interrupts::writeMpIle(CpuId id, uint32_t mask, uint32_t value) {

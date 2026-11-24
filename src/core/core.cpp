@@ -18,11 +18,13 @@
 */
 
 #include <algorithm>
+#include <cstdlib>
+#include <thread>
 #include "core.h"
 
 Core::Core(std::string &cartPath, std::function<void()> *contextFunc): aes(*this), arms { ArmInterp(*this, ARM11A),
         ArmInterp(*this, ARM11B), ArmInterp(*this, ARM11C), ArmInterp(*this, ARM11D), ArmInterp(*this, ARM9) },
-        cartridge(*this, cartPath), cdmas { Cdma(*this, CDMA0), Cdma(*this, CDMA1), Cdma(*this, XDMA) }, cp15(*this),
+        cartridge(*this, cartPath), cdmas { Cdma(*this, CDMA0), Cdma(*this, CDMA1), Cdma(*this, XDMA) }, cp15(*this), debug(*this),
         csnd(*this), gpu(*this, contextFunc), i2c(*this), input(*this), interrupts(*this), memory(*this),
         ndma(*this), pdc(*this), pxi(*this), rsa(*this), sdMmcs { SdMmc(*this), SdMmc(*this) }, shas { Sha(*this,
         0), Sha(*this, 1) }, timers(*this), vfp11s { Vfp11Interp(*this, ARM11A), Vfp11Interp(*this, ARM11B),
@@ -37,6 +39,10 @@ Core::Core(std::string &cartPath, std::function<void()> *contextFunc): aes(*this
     for (int i = 0; i < MAX_CPUS; i++)
         arms[i].init();
     initDsp();
+
+    // Optionally skip the boot ROMs' FIRM loading and start a FIRM directly
+    if (!Settings::firmPath.empty() && !loadFirm(Settings::firmPath))
+        throw ERROR_BOOTROM;
 
     // Define static tasks that can be scheduled
     tasks[RESET_CYCLES] = std::bind(&Core::resetCycles, this);
@@ -81,6 +87,12 @@ Core::Core(std::string &cartPath, std::function<void()> *contextFunc): aes(*this
     tasks[WIFI_WRITE_BLOCK] = std::bind(&Wifi::writeBlock, &wifi);
     tasks[NTR_WORD_READY] = std::bind(&Cartridge::ntrWordReady, &cartridge);
     tasks[CTR_WORD_READY] = std::bind(&Cartridge::ctrWordReady, &cartridge);
+    tasks[MCU_LCD_EVENT] = std::bind(&I2c::mcuLcdEvent, &i2c);
+
+    // Start the debug servers if requested
+    int dbgPort = Settings::debugPort;
+    if (const char *env = getenv("B3_DEBUG_PORT")) dbgPort = atoi(env);
+    if (dbgPort > 0) debug.start(dbgPort);
 
     // Schedule the initial tasks
     schedule(RESET_CYCLES, 0x7FFFFFFFFFFFFFFF);
@@ -89,8 +101,65 @@ Core::Core(std::string &cartPath, std::function<void()> *contextFunc): aes(*this
 }
 
 Core::~Core() {
+    // Shut down the debugger first so it stops touching the core
+    debug.stop();
+
     // Clean up the DSP
     delete dsp;
+}
+
+bool Core::loadFirm(const std::string &path) {
+    // Read the whole FIRM file and verify its header
+    FILE *file = fopen(path.c_str(), "rb");
+    if (!file) {
+        LOG_CRIT("Failed to open FIRM: %s\n", path.c_str());
+        return false;
+    }
+    std::vector<uint8_t> data(0x400000);
+    data.resize(fread(data.data(), sizeof(uint8_t), data.size(), file));
+    fclose(file);
+    auto word = [&](uint32_t offset) {
+        return (offset + 4 <= data.size()) ? *(uint32_t*)&data[offset] : 0;
+    };
+    if (word(0x0) != 0x4D524946) { // "FIRM"
+        LOG_CRIT("Invalid FIRM magic: %s\n", path.c_str());
+        return false;
+    }
+
+    // Copy each section to its physical address through the ARM9 memory map
+    for (int i = 0; i < 4; i++) {
+        uint32_t offset = word(0x40 + i * 0x30 + 0x0);
+        uint32_t address = word(0x40 + i * 0x30 + 0x4);
+        uint32_t size = word(0x40 + i * 0x30 + 0x8);
+        if (size == 0) continue;
+        if (offset + uint64_t(size) > data.size()) {
+            LOG_CRIT("FIRM section %d exceeds file size\n", i);
+            return false;
+        }
+        LOG_INFO("Loading FIRM section %d: 0x%X bytes to 0x%08X\n", i, size, address);
+        for (uint32_t j = 0; j < size; j++)
+            memory.write<uint8_t>(ARM9, address + j, data[offset + j]);
+    }
+
+    // Provide the legacy framebuffer pointers that payloads like the Linux loader read when argc is 0
+    // These match the top and bottom screen buffers that the loader's ARM11 stub points the PDC at
+    memory.write<uint32_t>(ARM9, 0x23FFFE00, 0x18000000);
+    memory.write<uint32_t>(ARM9, 0x23FFFE08, 0x18000000 + 4 * 400 * 240 * 3);
+
+    // Enable both PDC screens with V-blank interrupts masked, as a previous boot stage would have
+    pdc.writeInterruptType(0, 0xFFFFFFFF, 0x701);
+    pdc.writeInterruptType(1, 0xFFFFFFFF, 0x701);
+
+    // The Linux loader only configures the top screen's format and stride, so set up the bottom screen too
+    pdc.writeFramebufFormat(1, 0xFFFFFFFF, 0x80341);
+    pdc.writeFramebufStep(1, 0xFFFFFFFF, 0x2D0);
+
+    // Jump straight to the entrypoints; other ARM11 cores keep running the boot ROM until woken
+    // FIRM header: ARM11 entry at 0x08, ARM9 entry at 0x0C
+    arms[ARM9].jumpTo(word(0xC));
+    arms[ARM11A].jumpTo(word(0x8));
+    LOG_INFO("Direct FIRM boot: ARM9 entry 0x%08X, ARM11 entry 0x%08X\n", word(0xC), word(0x8));
+    return true;
 }
 
 void Core::initDsp() {
@@ -161,9 +230,19 @@ void Core::endFrame() {
         i2c.updateMcuRam();
     }
 
+    // Direct boot payloads like Linux don't use CSND, which normally paces the FPS limiter, so pace by time
+    if (Settings::fpsLimiter && !Settings::firmPath.empty()) {
+        auto now = std::chrono::steady_clock::now();
+        if (nextFrame < now - std::chrono::milliseconds(100)) nextFrame = now;
+        std::this_thread::sleep_until(nextFrame);
+        nextFrame += std::chrono::microseconds(16667);
+    }
+
     // Handle per-frame tasks and schedule the next one
+    debug.poll();
     pdc.drawFrame();
     input.updateHome();
+    input.updateLid();
     schedule(END_FRAME, 268111856 / 60);
 }
 
