@@ -424,7 +424,7 @@ void Debug::onFault(CpuId id, char type) {
     e.sp = *arm.registers[13];
     e.cpsr = arm.cpsr;
     bool pf = (type == 'P');
-    e.far = core.cp15.debugReg(id, pf ? 5 : 3);
+    e.faultAddr = core.cp15.debugReg(id, pf ? 5 : 3);
     e.fsr = core.cp15.debugReg(id, pf ? 4 : 2);
     e.ctxid = core.cp15.contextId(id);
     e.ttbr0 = core.cp15.debugReg(id, 0);
@@ -808,7 +808,7 @@ std::string Debug::cmdEmu(const std::vector<std::string> &a, bool &ok) {
         out << buf;
         for (auto &e : pick) {
             snprintf(buf, sizeof(buf), "%llu cpu%d %c pc=%08X lr=%08X sp=%08X cpsr=%08X far=%08X fsr=%03X ctx=%08X ttbr0=%08X\n",
-                (unsigned long long)e.cycles, e.cpu, e.type, e.pc, e.lr, e.sp, e.cpsr, e.far, e.fsr, e.ctxid, e.ttbr0);
+                (unsigned long long)e.cycles, e.cpu, e.type, e.pc, e.lr, e.sp, e.cpsr, e.faultAddr, e.fsr, e.ctxid, e.ttbr0);
             out << buf;
         }
         return out.str();

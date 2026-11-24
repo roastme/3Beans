@@ -33,7 +33,9 @@ struct FaultEntry {
     uint64_t cycles;
     uint8_t cpu;
     char type; // 'D' data abort, 'P' prefetch abort, 'I' unimplemented opcode, 'U' undefined instruction
-    uint32_t pc, lr, sp, cpsr, far, fsr, ctxid, ttbr0;
+    uint32_t pc, lr, sp, cpsr;
+    uint32_t faultAddr; // FAR/IFAR; not named 'far' because Windows headers #define it
+    uint32_t fsr, ctxid, ttbr0;
 };
 
 struct Breakpoint {
